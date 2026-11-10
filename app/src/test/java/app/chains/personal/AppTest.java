@@ -65,6 +65,26 @@ public class AppTest {
             a.edit(a.store.all().get(0));Dialog edit=org.robolectric.shadows.ShadowDialog.getLatestDialog();findText(edit.getWindow().getDecorView(),"Никогда").performClick();findText(edit.getWindow().getDecorView(),"Сохранить").performClick();assertEquals(0,a.store.all().get(0).breakAfter);
         }
     }
+    @Test public void pastStartFromUiPersistsAndSurvivesBackupAndEdits() throws Exception {
+        LocalDate start=LocalDate.now().minusDays(12);
+        try(ActivityController<MainActivity> ctrl=Robolectric.buildActivity(MainActivity.class).setup()){
+            MainActivity a=ctrl.get();a.edit(null);Dialog editor=org.robolectric.shadows.ShadowDialog.getLatestDialog();
+            java.util.List<EditText> inputs=new java.util.ArrayList<>();collectInputs(editor.getWindow().getDecorView(),inputs);inputs.get(0).setText("Читать");
+            findText(editor.getWindow().getDecorView(),"Сегодня").performClick();DatePickerDialog picker=(DatePickerDialog)org.robolectric.shadows.ShadowDialog.getLatestDialog();
+            Shadows.shadowOf(picker).getOnDateSetListenerCallback().onDateSet(picker.getDatePicker(),start.getYear(),start.getMonthValue()-1,start.getDayOfMonth());picker.dismiss();
+            findText(editor.getWindow().getDecorView(),"Сохранить").performClick();Habit h=a.store.all().get(0);
+            assertEquals(start,h.created);assertEquals(12,h.streak(LocalDate.now()));assertTrue(h.days.contains(start));assertFalse(h.days.contains(LocalDate.now()));assertTrue(a.new ChainProgress(h).filled(11));assertFalse(a.new ChainProgress(h).filled(12));
+            a.edit(h);Dialog edit=org.robolectric.shadows.ShadowDialog.getLatestDialog();findText(edit.getWindow().getDecorView(),"Сохранить").performClick();assertEquals(12,a.store.all().get(0).days.size());
+            findCheck(a.root).performClick();assertEquals(13,a.store.all().get(0).streak(LocalDate.now()));
+            String backup=a.store.exportJson();a.store.delete(h);a.store.importJson(backup);assertEquals(start,a.store.all().get(0).created);assertEquals(13,a.store.all().get(0).days.size());
+        }
+    }
+    @Test public void startTodayIsEmptyAndFutureStartIsRejected(){
+        try(Store s=new Store(context)){Habit h=new Habit();h.name="Сегодня";s.createFromDate(h,LocalDate.now());assertTrue(s.all().get(0).days.isEmpty());
+            try{s.createFromDate(new Habit(),LocalDate.now().plusDays(1));fail();}catch(IllegalArgumentException expected){}assertEquals(1,s.all().size());
+            try{s.createFromDate(h,LocalDate.now().minusDays(5));fail();}catch(IllegalArgumentException expected){}assertTrue(s.all().get(0).days.isEmpty());
+        }
+    }
     static void collectInputs(View v,java.util.List<EditText> out){if(v instanceof EditText)out.add((EditText)v);if(v instanceof ViewGroup)for(int i=0;i<((ViewGroup)v).getChildCount();i++)collectInputs(((ViewGroup)v).getChildAt(i),out);}
     static TextView findText(View v,String text){if(v instanceof TextView&&text.contentEquals(((TextView)v).getText()))return (TextView)v;if(v instanceof ViewGroup)for(int i=0;i<((ViewGroup)v).getChildCount();i++){TextView found=findText(((ViewGroup)v).getChildAt(i),text);if(found!=null)return found;}return null;}
     static CheckBox findCheck(View v){if(v instanceof CheckBox)return (CheckBox)v;if(v instanceof ViewGroup)for(int i=0;i<((ViewGroup)v).getChildCount();i++){CheckBox c=findCheck(((ViewGroup)v).getChildAt(i));if(c!=null)return c;}return null;}

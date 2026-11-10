@@ -31,6 +31,20 @@ public final class Store extends SQLiteOpenHelper {
         SQLiteDatabase db=getWritableDatabase();
         if(db.update("habits",v,"id=?",new String[]{h.id})==0) db.insertOrThrow("habits",null,v);
     }
+    public void createFromDate(Habit h, LocalDate start) {
+        LocalDate today=LocalDate.now();
+        if(start.isAfter(today)) throw new IllegalArgumentException("Future start date");
+        SQLiteDatabase db=getWritableDatabase();db.beginTransaction();
+        try {
+            try(Cursor c=db.rawQuery("SELECT id FROM habits WHERE id=?",new String[]{h.id})) { if(c.moveToFirst()) throw new IllegalArgumentException("Habit already exists"); }
+            h.created=start;save(h);
+            for(LocalDate day=start;day.isBefore(today);day=day.plusDays(1)) {
+                ContentValues v=new ContentValues();v.put("habit",h.id);v.put("day",day.toString());db.insertOrThrow("marks",null,v);
+            }
+            db.setTransactionSuccessful();
+        } finally { db.endTransaction(); }
+        h.days.clear();for(LocalDate day=start;day.isBefore(today);day=day.plusDays(1)) h.days.add(day);
+    }
     public void mark(Habit h, LocalDate day) {
         if(day.isAfter(LocalDate.now()) || day.isBefore(h.created)) return;
         if(h.days.contains(day)) { getWritableDatabase().delete("marks","habit=? AND day=?",new String[]{h.id,day.toString()}); h.days.remove(day); }
