@@ -28,7 +28,9 @@ jobs:
           distribution: temurin
           java-version: '17'
       - name: Prepare Android SDK
-        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          "$SDKMANAGER" 'platforms;android-35' 'build-tools;35.0.0'
       - name: Restore signing identity
         env:
           KEYSTORE_BASE64: ${{ secrets.CHAINS_KEYSTORE_BASE64 }}
