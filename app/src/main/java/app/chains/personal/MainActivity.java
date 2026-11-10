@@ -60,7 +60,7 @@ public class MainActivity extends Activity {
         LinearLayout top=row();LinearLayout labels=column();TextView name=strong(h.name,19,INK);name.setMaxLines(2);labels.addView(name);space(labels,5);
         int n=h.streak(shownDay);labels.addView(text(n+" / "+h.goal,13,n>=h.goal?ACCENT:MUTED));weight(top,labels);
         CheckBox check=new CheckBox(this);check.setButtonTintList(android.content.res.ColorStateList.valueOf(h.days.contains(shownDay)?ACCENT:0xff61665a));check.setChecked(h.days.contains(shownDay));check.setContentDescription(h.name+": выполнено сегодня");
-        LinearLayout.LayoutParams checkSize=new LinearLayout.LayoutParams(dp(48),dp(48));checkSize.setMarginEnd(dp(8));top.addView(check,0,checkSize);check.setOnCheckedChangeListener((v,checked)->{store.mark(h,LocalDate.now());if(checked){((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).cancel(h.id.hashCode());v.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);}render();});
+        top.addView(check,new LinearLayout.LayoutParams(dp(48),dp(48)));check.setOnCheckedChangeListener((v,checked)->{store.mark(h,LocalDate.now());if(checked){((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).cancel(h.id.hashCode());v.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);}render();});
         card.addView(top);touch(labels,()->edit(h));space(card,20);
         ChainProgress chain=new ChainProgress(h);
         card.addView(chain,new LinearLayout.LayoutParams(-1,dp(chain.rows*28)));
