@@ -45,7 +45,7 @@ public class MainActivity extends Activity {
         root=column();root.setBackgroundColor(Color.BLACK);root.setPadding(dp(24),0,dp(24),0);
         root.setOnApplyWindowInsetsListener((v,insets)->{v.setPadding(dp(24),insets.getSystemWindowInsetTop(),dp(24),insets.getSystemWindowInsetBottom());return insets.consumeSystemWindowInsets();});
         setContentView(root);root.requestApplyInsets();space(root,18);
-        LinearLayout header=row();TextView brand=strong("chains",32,INK);brand.setLetterSpacing(-.06f);weight(header,brand);header.addView(icon("settings","Настройки",this::settings));root.addView(header);space(root,30);
+        LinearLayout header=row();ImageView logo=new ImageView(this);logo.setImageResource(R.drawable.ic_brand);logo.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);LinearLayout.LayoutParams logoSize=new LinearLayout.LayoutParams(dp(32),dp(32));logoSize.setMarginEnd(dp(10));header.addView(logo,logoSize);TextView brand=strong("chains",32,INK);brand.setLetterSpacing(-.06f);weight(header,brand);header.addView(icon("settings","Настройки",this::settings));root.addView(header);space(root,30);
         TextView date=text(shownDay.format(DateTimeFormatter.ofPattern("d MMMM",RU)),13,MUTED);root.addView(date);space(root,24);
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setClipToPadding(false);scroll.setVerticalScrollBarEnabled(false);content=column();content.setPadding(0,0,0,dp(12));scroll.addView(content);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         if(habits.isEmpty()){
