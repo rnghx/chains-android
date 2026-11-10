@@ -1,0 +1,1 @@
+<full-backup-content><include domain="database" path="chains.db" /><include domain="sharedpref" path="settings.xml" /></full-backup-content>

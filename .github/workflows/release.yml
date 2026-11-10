@@ -1,0 +1,68 @@
+name: Signed Android release
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the verified version to Releases
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: chains-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Prepare Android SDK
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Restore signing identity
+        env:
+          KEYSTORE_BASE64: ${{ secrets.CHAINS_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$KEYSTORE_BASE64"
+          mkdir -p .signing
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > .signing/chains.jks
+          chmod 600 .signing/chains.jks
+      - name: Test and build signed APK
+        env:
+          CHAINS_STORE_PASSWORD: ${{ secrets.CHAINS_STORE_PASSWORD }}
+        run: |
+          mkdir -p tests/out
+          javac -encoding UTF-8 -d tests/out app/src/main/java/app/chains/personal/Habit.java tests/HabitTest.java
+          java -cp tests/out app.chains.personal.HabitTest
+          java -classpath gradle/wrapper/gradle-wrapper.jar org.gradle.wrapper.GradleWrapperMain --console=plain testDebugUnitTest assembleRelease lintRelease
+      - name: Verify identity and package release
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/release/app-release.apk dist/app.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs dist/app.apk > dist/certificate.txt
+          grep -q 'certificate SHA-256 digest: 1a1762340fe4846b2867ad78264a1344501181f63f9de5525d7c0fa00a97f191' dist/certificate.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging dist/app.apk | head -n 1 > dist/package.txt
+          grep -q "name='app.chains.personal'" dist/package.txt
+          git archive --format=zip HEAD -o dist/source.zip
+          node scripts/release-metadata.cjs
+      - name: Publish verified release
+        if: ${{ inputs.publish }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(node -p "require('./dist/update.json').versionName")
+          gh release create "v$VERSION" dist/app.apk dist/source.zip dist/update.json --draft --title "$VERSION" --notes-file RELEASE_NOTES.md --target "$GITHUB_SHA"
+          gh release edit "v$VERSION" --draft=false --latest
+      - name: Remove signing file
+        if: always()
+        run: rm -f .signing/chains.jks
