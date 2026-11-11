@@ -41,7 +41,7 @@ public class MainActivity extends Activity {
     void title(LinearLayout parent,String s){TextView t=text(s,12,MUTED);t.setLetterSpacing(.13f);parent.addView(t);space(parent,12);}
 
     void render(){
-        shownDay=LocalDate.now(); habits=store.all();
+        shownDay=LocalDate.now(); habits=new ArrayList<>();for(Habit h:store.all())if(h.completedOn==null)habits.add(h);
         root=column();root.setBackgroundColor(Color.BLACK);root.setPadding(dp(24),0,dp(24),0);
         root.setOnApplyWindowInsetsListener((v,insets)->{v.setPadding(dp(24),insets.getSystemWindowInsetTop(),dp(24),insets.getSystemWindowInsetBottom());return insets.consumeSystemWindowInsets();});
         setContentView(root);root.requestApplyInsets();space(root,18);
@@ -49,51 +49,80 @@ public class MainActivity extends Activity {
         TextView date=text(shownDay.format(DateTimeFormatter.ofPattern("d MMMM",RU)),13,MUTED);root.addView(date);space(root,24);
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setClipToPadding(false);scroll.setVerticalScrollBarEnabled(false);content=column();content.setPadding(0,0,0,dp(12));scroll.addView(content);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         if(habits.isEmpty()){
-            LinearLayout empty=column();empty.setGravity(Gravity.CENTER);empty.addView(new EmptyChain(),new LinearLayout.LayoutParams(dp(160),dp(150)));space(empty,24);empty.addView(strong("Первая цепочка",23,INK));space(empty,30);TextView create=button("+  Создать привычку",()->edit(null));create.setTextColor(Color.BLACK);create.setBackground(bg(ACCENT,18));empty.addView(create,new LinearLayout.LayoutParams(-1,dp(56)));content.addView(empty,new LinearLayout.LayoutParams(-1,-1));
+            LinearLayout empty=column();empty.setGravity(Gravity.CENTER);empty.addView(new EmptyChain(),new LinearLayout.LayoutParams(dp(160),dp(150)));space(empty,24);empty.addView(strong("Первая цепочка",23,INK));space(empty,30);TextView create=button("+  Создать привычку",()->edit(null));create.setTextColor(Color.BLACK);create.setBackground(bg(ACCENT,18));empty.addView(create,new LinearLayout.LayoutParams(-1,dp(56)));space(empty,8);empty.addView(button("+  Заметка",()->edit(null,true)),new LinearLayout.LayoutParams(-1,dp(52)));content.addView(empty,new LinearLayout.LayoutParams(-1,-1));
         }else{
             for(Habit h:habits){content.addView(card(h));space(content,12);}
-            TextView add=button("+  Новая привычка",()->edit(null));add.setTextColor(ACCENT);add.setBackground(bg(PANEL,20));content.addView(add);space(content,12);
+            TextView add=button("+  Новая привычка",()->edit(null));add.setTextColor(ACCENT);add.setBackground(bg(PANEL,20));content.addView(add);space(content,8);content.addView(button("+  Заметка",()->edit(null,true)));space(content,12);
         }
     }
     View card(Habit h){
         LinearLayout card=column();card.setBackground(bg(PANEL,24));card.setPadding(dp(20),dp(20),dp(20),dp(20));
         LinearLayout top=row();LinearLayout labels=column();TextView name=strong(h.name,19,INK);name.setMaxLines(2);labels.addView(name);space(labels,5);
-        int n=h.streak(shownDay);labels.addView(text(n+" / "+h.goal,13,n>=h.goal?ACCENT:MUTED));weight(top,labels);
-        CheckBox check=new CheckBox(this);check.setButtonTintList(android.content.res.ColorStateList.valueOf(h.days.contains(shownDay)?ACCENT:0xff61665a));check.setChecked(h.days.contains(shownDay));check.setContentDescription(h.name+": выполнено сегодня");
+        int n=h.streak(shownDay);if(h.tracksDaily())labels.addView(text(n+" / "+h.goal,13,n>=h.goal?ACCENT:MUTED));weight(top,labels);
+        CheckBox check=new CheckBox(this);check.setButtonTintList(android.content.res.ColorStateList.valueOf(h.days.contains(shownDay)?ACCENT:0xff61665a));check.setChecked(h.days.contains(shownDay));check.setContentDescription(h.name+(h.isNote?": прочитано сегодня":": выполнено сегодня"));check.setVisibility(h.tracksDaily()?View.VISIBLE:View.GONE);
         top.addView(check,new LinearLayout.LayoutParams(dp(48),dp(48)));check.setOnCheckedChangeListener((v,checked)->{store.mark(h,LocalDate.now());if(checked){((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).cancel(h.id.hashCode());v.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);}render();});
-        card.addView(top);touch(labels,()->edit(h));space(card,20);
-        ChainProgress chain=new ChainProgress(h);
-        card.addView(chain,new LinearLayout.LayoutParams(-1,dp(chain.rows*28)));
-        touch(card,()->edit(h));return card;
+        card.addView(top);
+        if(h.isNote){space(card,12);TextView preview=text(h.note,16,INK);preview.setMaxLines(4);preview.setEllipsize(android.text.TextUtils.TruncateAt.END);card.addView(preview);}
+        if(h.tracksDaily()){space(card,20);ChainProgress chain=new ChainProgress(h);card.addView(chain,new LinearLayout.LayoutParams(-1,dp(chain.rows*28)));}
+        if(h.tracksDaily()&&h.completionDate(shownDay)!=null){space(card,12);card.addView(button("В архив",()->archiveHabit(h)));}
+        touch(card,()->{if(h.isNote)readNote(h);else edit(h);});return card;
     }
     Dialog sheet(LinearLayout view){Dialog d=new Dialog(this);ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.addView(view);view.setPadding(dp(24),dp(26),dp(24),dp(28));d.setContentView(scroll);Window w=d.getWindow();w.setBackgroundDrawable(bg(PANEL,28));w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);WindowManager.LayoutParams a=w.getAttributes();a.width=-1;a.height=-2;a.gravity=Gravity.BOTTOM;a.dimAmount=.65f;w.setAttributes(a);w.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);return d;}
     EditText input(String value,String hint,int type){EditText e=new EditText(this);e.setText(value);e.setHint(hint);e.setTextSize(18);e.setSingleLine(true);e.setTextColor(INK);e.setHintTextColor(MUTED);e.setInputType(type);e.setPadding(dp(14),dp(12),dp(14),dp(12));e.setBackground(bg(0xff1d1f1b,14));return e;}
-    void edit(Habit original){
-        Habit h=original==null?new Habit():original;LinearLayout body=column();Dialog dialog=sheet(body);
-        LinearLayout head=row();weight(head,strong(original==null?"Новая привычка":"Привычка",24,INK));head.addView(icon("close","Закрыть",dialog::dismiss));body.addView(head);space(body,26);
-        title(body,"НАЗВАНИЕ");EditText name=input(h.name,"Например, читать",android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);name.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(80)});body.addView(name);space(body,24);
+    void edit(Habit original){edit(original,false);}
+    void edit(Habit original,boolean note){
+        Habit h=original==null?new Habit():original;if(original==null)h.isNote=note;LinearLayout body=column();Dialog dialog=sheet(body);
+        LinearLayout head=row();weight(head,strong(h.isNote?(original==null?"Новая заметка":"Заметка"):(original==null?"Новая привычка":"Привычка"),24,INK));head.addView(icon("close","Закрыть",dialog::dismiss));body.addView(head);space(body,26);
+        title(body,"НАЗВАНИЕ");EditText name=input(h.name,h.isNote?"Название":"Например, читать",android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);name.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(80)});body.addView(name);space(body,24);
+        EditText noteText=input(h.note,"",android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE|android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);noteText.setSingleLine(false);noteText.setMinLines(5);noteText.setGravity(Gravity.TOP|Gravity.START);noteText.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(20000)});
+        Switch daily=new Switch(this);daily.setText("Читать ежедневно");daily.setTextColor(INK);daily.setTextSize(16);daily.setMinHeight(dp(48));daily.setChecked(h.daily);
+        if(h.isNote){title(body,"ТЕКСТ");body.addView(noteText);space(body,16);body.addView(daily);space(body,24);}
+        LinearLayout tracking=column();body.addView(tracking);tracking.setVisibility(h.tracksDaily()?View.VISIBLE:View.GONE);daily.setOnCheckedChangeListener((v,on)->tracking.setVisibility(on?View.VISIBLE:View.GONE));
         final LocalDate[] start={LocalDate.now()};
         if(original==null){
-            title(body,"ДАТА НАЧАЛА");TextView startDate=button("",()->{});Runnable showStart=()->startDate.setText(start[0].equals(LocalDate.now())?"Сегодня":start[0].format(DateTimeFormatter.ofPattern("d MMMM yyyy",RU)));showStart.run();
+            title(tracking,"ДАТА НАЧАЛА");TextView startDate=button("",()->{});Runnable showStart=()->startDate.setText(start[0].equals(LocalDate.now())?"Сегодня":start[0].format(DateTimeFormatter.ofPattern("d MMMM yyyy",RU)));showStart.run();
             touch(startDate,()->{DatePickerDialog picker=new DatePickerDialog(this,(v,year,month,day)->{LocalDate selected=LocalDate.of(year,month+1,day);if(!selected.isAfter(LocalDate.now())){start[0]=selected;showStart.run();}},start[0].getYear(),start[0].getMonthValue()-1,start[0].getDayOfMonth());picker.getDatePicker().setMaxDate(System.currentTimeMillis());picker.show();});
-            body.addView(startDate);space(body,8);body.addView(text("Дни до сегодня будут отмечены выполненными.\nСегодня отметьте отдельно.",13,MUTED));space(body,24);
+            tracking.addView(startDate);space(tracking,24);
         }
-        title(body,"ЦЕЛЬ · ДНЕЙ");EditText goal=input(""+h.goal,"30",android.text.InputType.TYPE_CLASS_NUMBER);goal.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(4)});body.addView(goal);space(body,24);
-        title(body,"ОБРЫВ ПОСЛЕ ПРОПУСКОВ");LinearLayout choices=row();final int[] rule={h.breakAfter};final ArrayList<TextView> opts=new ArrayList<>();
+        title(tracking,"ЦЕЛЬ · ДНЕЙ");EditText goal=input(""+h.goal,"30",android.text.InputType.TYPE_CLASS_NUMBER);goal.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(4)});tracking.addView(goal);space(tracking,24);
+        title(tracking,"ОБРЫВ ПОСЛЕ ПРОПУСКОВ");LinearLayout choices=row();final int[] rule={h.breakAfter};final ArrayList<TextView> opts=new ArrayList<>();
         int[] values={1,2,0,-1};String[] names={"1 дня","2 дней","Никогда",h.breakAfter>2?h.breakAfter+" дней":"Другое"};
         Runnable refresh=()->{for(int j=0;j<opts.size();j++){boolean active=values[j]==rule[0]||(j==3&&rule[0]>2);opts.get(j).setBackground(bg(active?ACCENT:0xff20221e,12));opts.get(j).setTextColor(active?Color.BLACK:MUTED);}};
-        for(int i=0;i<4;i++){final int at=i;TextView o=button(names[i],()->{if(at==3){EditText number=input(rule[0]>2?""+rule[0]:"3","3–365",android.text.InputType.TYPE_CLASS_NUMBER);AlertDialog other=new AlertDialog.Builder(this).setTitle("Дней подряд").setView(number).setNegativeButton("Отмена",null).setPositiveButton("Готово",null).create();other.setOnShowListener(x->other.getButton(-1).setOnClickListener(v->{try{int n=Integer.parseInt(number.getText().toString());if(n<3||n>365)throw new Exception();rule[0]=n;opts.get(3).setText(n+" дней");refresh.run();other.dismiss();}catch(Exception e){number.setError("От 3 до 365");}}));other.show();}else{rule[0]=values[at];refresh.run();}});o.setTextSize(12);o.setPadding(dp(4),0,dp(4),0);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(48),1);if(i>0)p.leftMargin=dp(5);choices.addView(o,p);opts.add(o);}refresh.run();body.addView(choices);space(body,24);
-        LinearLayout reminderRow=row();weight(reminderRow,strong("Напоминание",16,INK));Switch reminder=new Switch(this);reminder.setContentDescription("Ежедневное напоминание");reminder.setChecked(h.reminder);reminderRow.addView(reminder);body.addView(reminderRow);space(body,10);
-        final int[] minute={h.minute};TextView time=button(String.format(RU,"%02d:%02d",minute[0]/60,minute[0]%60),()->{});time.setBackground(bg(0xff20221e,14));touch(time,()->new TimePickerDialog(this,(v,hr,min)->{minute[0]=hr*60+min;time.setText(String.format(RU,"%02d:%02d",hr,min));},minute[0]/60,minute[0]%60,true).show());time.setVisibility(reminder.isChecked()?View.VISIBLE:View.GONE);reminder.setOnCheckedChangeListener((v,on)->time.setVisibility(on?View.VISIBLE:View.GONE));body.addView(time);space(body,26);
-        TextView save=button("Сохранить",()->{String n=name.getText().toString().trim();int g;try{g=Integer.parseInt(goal.getText().toString());if(g<1||g>9999)throw new Exception();}catch(Exception e){goal.setError("От 1 до 9999");return;}if(n.isEmpty()){name.setError("Название");return;}h.name=n;h.goal=g;h.breakAfter=rule[0];h.minute=minute[0];h.reminder=reminder.isChecked();if(original==null)store.createFromDate(h,start[0]);else store.save(h);ReminderReceiver.schedule(this,h);dialog.dismiss();render();if(h.reminder)notificationPermission();});save.setBackground(bg(ACCENT,16));save.setTextColor(Color.BLACK);body.addView(save,new LinearLayout.LayoutParams(-1,dp(56)));
-        if(original!=null){space(body,10);TextView remove=button("Удалить привычку",()->new AlertDialog.Builder(this).setTitle("Удалить «"+h.name+"»?").setMessage("История этой привычки будет удалена.").setNegativeButton("Отмена",null).setPositiveButton("Удалить",(d,w)->{h.reminder=false;ReminderReceiver.schedule(this,h);((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).cancel(h.id.hashCode());store.delete(h);dialog.dismiss();render();}).show());remove.setTextColor(0xffd8a8a0);body.addView(remove);}
+        for(int i=0;i<4;i++){final int at=i;TextView o=button(names[i],()->{if(at==3){EditText number=input(rule[0]>2?""+rule[0]:"3","3–365",android.text.InputType.TYPE_CLASS_NUMBER);AlertDialog other=new AlertDialog.Builder(this).setTitle("Дней подряд").setView(number).setNegativeButton("Отмена",null).setPositiveButton("Готово",null).create();other.setOnShowListener(x->other.getButton(-1).setOnClickListener(v->{try{int n=Integer.parseInt(number.getText().toString());if(n<3||n>365)throw new Exception();rule[0]=n;opts.get(3).setText(n+" дней");refresh.run();other.dismiss();}catch(Exception e){number.setError("От 3 до 365");}}));other.show();}else{rule[0]=values[at];refresh.run();}});o.setTextSize(12);o.setPadding(dp(4),0,dp(4),0);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(48),1);if(i>0)p.leftMargin=dp(5);choices.addView(o,p);opts.add(o);}refresh.run();tracking.addView(choices);space(tracking,24);
+        LinearLayout reminderRow=row();weight(reminderRow,strong("Напоминание",16,INK));Switch reminder=new Switch(this);reminder.setContentDescription("Ежедневное напоминание");reminder.setChecked(h.reminder);reminderRow.addView(reminder);tracking.addView(reminderRow);space(tracking,10);
+        final int[] minute={h.minute};TextView time=button(String.format(RU,"%02d:%02d",minute[0]/60,minute[0]%60),()->{});time.setBackground(bg(0xff20221e,14));touch(time,()->new TimePickerDialog(this,(v,hr,min)->{minute[0]=hr*60+min;time.setText(String.format(RU,"%02d:%02d",hr,min));},minute[0]/60,minute[0]%60,true).show());time.setVisibility(reminder.isChecked()?View.VISIBLE:View.GONE);reminder.setOnCheckedChangeListener((v,on)->time.setVisibility(on?View.VISIBLE:View.GONE));tracking.addView(time);space(tracking,26);
+        TextView save=button("Сохранить",()->{String n=name.getText().toString().trim();int g;try{g=Integer.parseInt(goal.getText().toString());if(g<1||g>9999)throw new Exception();}catch(Exception e){goal.setError("От 1 до 9999");return;}if(h.isNote&&noteText.getText().toString().trim().isEmpty()){noteText.setError("Текст");return;}if(h.isNote&&n.isEmpty()){n=noteText.getText().toString().trim().split("\\r?\\n",2)[0];if(n.length()>80)n=n.substring(0,80);}if(n.isEmpty()){name.setError("Название");return;}h.note=h.isNote?noteText.getText().toString():"";h.daily=!h.isNote||daily.isChecked();h.name=n;h.goal=g;h.breakAfter=rule[0];h.minute=minute[0];h.reminder=reminder.isChecked();if(original==null)store.createFromDate(h,start[0]);else store.save(h);ReminderReceiver.schedule(this,h);dialog.dismiss();render();if(h.reminder)notificationPermission();});save.setBackground(bg(ACCENT,16));save.setTextColor(Color.BLACK);body.addView(save,new LinearLayout.LayoutParams(-1,dp(56)));
+        if(original!=null&&(h.completionDate(LocalDate.now())!=null||!h.tracksDaily())){space(body,10);body.addView(button("В архив",()->{dialog.dismiss();archiveHabit(h);}));}
+        if(original!=null){space(body,10);TextView remove=button(h.isNote?"Удалить заметку":"Удалить привычку",()->new AlertDialog.Builder(this).setTitle("Удалить «"+h.name+"»?").setMessage("История этой привычки будет удалена.").setNegativeButton("Отмена",null).setPositiveButton("Удалить",(d,w)->{h.reminder=false;ReminderReceiver.schedule(this,h);((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).cancel(h.id.hashCode());store.delete(h);dialog.dismiss();render();}).show());remove.setTextColor(0xffd8a8a0);body.addView(remove);}
         dialog.show();
+    }
+    void archiveHabit(Habit h){
+        store.archive(h);ReminderReceiver.schedule(this,h);((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).cancel(h.id.hashCode());render();
+    }
+    void readNote(Habit h){
+        LinearLayout body=column();Dialog d=sheet(body);LinearLayout top=row();weight(top,strong(h.name,24,INK));
+        if(h.completedOn==null)top.addView(icon("edit","Редактировать",()->{d.dismiss();edit(h);}));top.addView(icon("close","Закрыть",d::dismiss));body.addView(top);space(body,20);
+        TextView note=text(h.note,18,INK);note.setTextIsSelectable(true);note.setLineSpacing(dp(4),1);body.addView(note);
+        if(h.completedOn==null&&h.tracksDaily()){space(body,24);TextView read=button(h.days.contains(LocalDate.now())?"Прочитано сегодня":"Прочитано",()->{if(!h.days.contains(LocalDate.now())){store.mark(h,LocalDate.now());((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).cancel(h.id.hashCode());}d.dismiss();render();});body.addView(read);}
+        d.show();
+    }
+    void archive(){
+        LinearLayout body=column();Dialog d=sheet(body);LinearLayout top=row();weight(top,strong("Архив",24,INK));top.addView(icon("close","Закрыть",d::dismiss));body.addView(top);space(body,24);
+        boolean empty=true;
+        for(Habit h:store.all())if(h.completedOn!=null){
+            empty=false;LinearLayout item=column();item.setPadding(dp(16),dp(16),dp(16),dp(16));item.setBackground(bg(0xff1d1f1b,18));item.addView(strong(h.name,19,INK));space(item,8);
+            DateTimeFormatter format=DateTimeFormatter.ofPattern("dd.MM.yyyy",RU);item.addView(text(h.created.format(format)+" → "+h.completedOn.format(format),13,MUTED));
+            if(h.isNote){space(item,12);TextView preview=text(h.note,16,INK);preview.setMaxLines(4);preview.setEllipsize(android.text.TextUtils.TruncateAt.END);item.addView(preview);touch(preview,()->readNote(h));}
+            space(item,12);item.addView(button("Вернуть",()->{store.restore(h);ReminderReceiver.schedule(this,h);d.dismiss();render();}));body.addView(item);space(body,12);
+        }
+        if(empty)body.addView(text("Пусто",15,MUTED));d.show();
     }
     void notificationPermission(){if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},41);}
     @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] results){super.onRequestPermissionsResult(request,permissions,results);if(request==41&&(results.length==0||results[0]!=PackageManager.PERMISSION_GRANTED))new AlertDialog.Builder(this).setTitle("Уведомления выключены").setMessage("Разрешить их можно в настройках Android.").setPositiveButton("Настройки",(d,w)->startActivity(new Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(android.provider.Settings.EXTRA_APP_PACKAGE,getPackageName()))).setNegativeButton("Закрыть",null).show();}
 
     void settings(){
         LinearLayout body=column();Dialog d=sheet(body);LinearLayout top=row();weight(top,strong("Настройки",24,INK));top.addView(icon("close","Закрыть",d::dismiss));body.addView(top);space(body,28);title(body,"ДАННЫЕ");
+        body.addView(button("Архив",()->{d.dismiss();archive();}));space(body,8);
         body.addView(button("Сохранить копию  ↗",()->{Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/json").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"chains-"+LocalDate.now()+".json");startActivityForResult(i,101);}));space(body,8);
         body.addView(button("Восстановить из копии  ↙",()->startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE),102)));space(body,26);title(body,"ПРИЛОЖЕНИЕ");
         body.addView(button("Обновить приложение  ↗",()->{d.dismiss();updater.check();}));space(body,8);

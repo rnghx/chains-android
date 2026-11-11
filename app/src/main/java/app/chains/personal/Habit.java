@@ -7,9 +7,22 @@ import java.util.*;
 public final class Habit {
     public String id = UUID.randomUUID().toString(), name = "";
     public int goal = 30, breakAfter = 1, minute = 21 * 60;
-    public boolean reminder = false;
+    public boolean reminder = false, isNote = false, daily = true;
+    public String note = "";
+    public LocalDate completedOn;
     public LocalDate created = LocalDate.now();
     public final TreeSet<LocalDate> days = new TreeSet<>();
+
+    public boolean tracksDaily() { return !isNote || daily; }
+    public LocalDate completionDate(LocalDate today) {
+        int count=0;LocalDate previous=null;
+        for(LocalDate day:days){
+            if(day.isAfter(today)) break;
+            if(previous!=null&&breakAfter>0&&ChronoUnit.DAYS.between(previous,day)-1>=breakAfter) count=0;
+            count++;if(count>=goal) return day;previous=day;
+        }
+        return null;
+    }
 
     public int streak(LocalDate today) {
         int count = 0;
