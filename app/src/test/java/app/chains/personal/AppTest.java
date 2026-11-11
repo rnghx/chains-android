@@ -19,7 +19,7 @@ import static org.junit.Assert.*;
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class AppTest {
     Context context;
-    @Before public void prepare(){context=RuntimeEnvironment.getApplication();context.deleteDatabase("chains.db");}
+    @Before public void prepare(){context=RuntimeEnvironment.getApplication();context.deleteDatabase("chains.db");context.getSharedPreferences("settings",0).edit().clear().commit();}
     Habit sample(Store s){Habit h=new Habit();h.name="Читать";h.created=LocalDate.now().minusDays(30);s.save(h);s.mark(h,LocalDate.now().minusDays(1));return h;}
     @Test public void reopeningAndEditingKeepHistory(){
         String id;
@@ -102,10 +102,10 @@ public class AppTest {
         try(ActivityController<MainActivity> ctrl=Robolectric.buildActivity(MainActivity.class).setup()){
             MainActivity a=ctrl.get();a.edit(null,true);Dialog editor=org.robolectric.shadows.ShadowDialog.getLatestDialog();
             java.util.List<EditText> inputs=new java.util.ArrayList<>();collectInputs(editor.getWindow().getDecorView(),inputs);assertEquals(3,inputs.size());inputs.get(1).setText("Моя заметка\nВторая строка");inputs.get(2).setText("1");
-            findText(editor.getWindow().getDecorView(),"Сохранить").performClick();Habit h=a.store.all().get(0);assertTrue(h.isNote);assertEquals("Моя заметка",h.name);assertEquals("Моя заметка\nВторая строка",h.note);assertTrue(h.tracksDaily());screenshot(a.getWindow().getDecorView(),"note-card");
-            a.readNote(h);Dialog reader=org.robolectric.shadows.ShadowDialog.getLatestDialog();assertNotNull(findText(reader.getWindow().getDecorView(),h.note));screenshot(reader.getWindow().getDecorView(),"note-reader");findText(reader.getWindow().getDecorView(),"Прочитано").performClick();h=a.store.all().get(0);assertEquals(1,h.streak(LocalDate.now()));
+            findText(editor.getWindow().getDecorView(),"Сохранить").performClick();Habit h=a.store.all().get(0);assertTrue(h.isNote);assertEquals("Заметка",h.name);assertEquals("Моя заметка\nВторая строка",h.note);assertTrue(h.tracksDaily());assertNull(findText(a.root,h.note));assertNotNull(findText(a.root,"Прочитать"));screenshot(a.getWindow().getDecorView(),"note-card");
+            findText(a.root,"Прочитать").performClick();Dialog reader=org.robolectric.shadows.ShadowDialog.getLatestDialog();assertNotNull(findText(reader.getWindow().getDecorView(),h.note));screenshot(reader.getWindow().getDecorView(),"note-reader");findText(reader.getWindow().getDecorView(),"Прочитано").performClick();h=a.store.all().get(0);assertEquals(1,h.streak(LocalDate.now()));
             findText(a.root,"В архив").performClick();assertTrue(a.habits.isEmpty());h=a.store.all().get(0);assertEquals(LocalDate.now(),h.completedOn);assertEquals(1,h.days.size());
-            a.archive();Dialog archive=org.robolectric.shadows.ShadowDialog.getLatestDialog();String date=LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy"));assertNotNull(findText(archive.getWindow().getDecorView(),date+" → "+date));screenshot(archive.getWindow().getDecorView(),"archive");findText(archive.getWindow().getDecorView(),"Вернуть").performClick();assertEquals(1,a.habits.size());assertNull(a.store.all().get(0).completedOn);assertEquals(1,a.store.all().get(0).days.size());
+            a.archive();Dialog archive=org.robolectric.shadows.ShadowDialog.getLatestDialog();String date=LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy"));assertNotNull(findText(archive.getWindow().getDecorView(),date+" → "+date));assertNull(findText(archive.getWindow().getDecorView(),h.note));assertNotNull(findText(archive.getWindow().getDecorView(),"Прочитать"));screenshot(archive.getWindow().getDecorView(),"archive");findText(archive.getWindow().getDecorView(),"Вернуть").performClick();assertEquals(1,a.habits.size());assertNull(a.store.all().get(0).completedOn);assertEquals(1,a.store.all().get(0).days.size());
         }
     }
     @Test public void plainNoteHasNoCheckboxAndKeepsTextAfterReopening(){
@@ -125,6 +125,30 @@ public class AppTest {
     }
     @Test public void completionDateIncludesPastAchievementEvenAfterBreak(){
         Habit h=new Habit();h.goal=2;LocalDate today=LocalDate.now();h.days.add(today.minusDays(10));h.days.add(today.minusDays(9));h.days.add(today);assertEquals(1,h.streak(today));assertEquals(today.minusDays(9),h.completionDate(today));
+    }
+    @Test public void completedFilterPersistsAndDailySummaryUpdates() throws Exception {
+        try(Store store=new Store(context)){
+            Habit h=new Habit();h.name="Привычка";h.created=LocalDate.now().minusDays(1);store.save(h);
+            Habit note=new Habit();note.name="Чтение";note.isNote=true;note.note="Ежедневный текст";store.save(note);
+            Habit plain=new Habit();plain.name="Обычная заметка";plain.isNote=true;plain.daily=false;plain.note="Без отметок";store.save(plain);
+        }
+        try(ActivityController<MainActivity> ctrl=Robolectric.buildActivity(MainActivity.class).setup()){
+            MainActivity a=ctrl.get();assertNull(findText(a.root,"Все выполнено"));findText(a.root,"Скрыть выполненные").performClick();findCheck(a.root).performClick();assertNull(findText(a.root,"Привычка"));assertNotNull(findText(a.root,"Чтение"));assertNull(findText(a.root,"Все выполнено"));
+            findCheck(a.root).performClick();assertNull(findText(a.root,"Чтение"));assertNotNull(findText(a.root,"Обычная заметка"));assertNotNull(findText(a.root,"Все выполнено"));assertEquals(1,a.store.all().get(0).days.size());screenshot(a.getWindow().getDecorView(),"all-done");
+        }
+        try(ActivityController<MainActivity> ctrl=Robolectric.buildActivity(MainActivity.class).setup()){
+            MainActivity a=ctrl.get();assertNotNull(findText(a.root,"Показать выполненные"));assertNull(findText(a.root,"Привычка"));assertNotNull(findText(a.root,"Все выполнено"));findText(a.root,"Показать выполненные").performClick();assertNotNull(findText(a.root,"Привычка"));assertTrue(findCheck(a.root).isChecked());
+            findCheck(a.root).performClick();assertNull(findText(a.root,"Все выполнено"));findText(a.root,"Скрыть выполненные").performClick();assertNotNull(findText(a.root,"Привычка"));assertNull(findText(a.root,"Чтение"));
+            Habit note=a.store.all().get(1);a.store.mark(note,LocalDate.now());a.render();assertNotNull(findText(a.root,"Чтение"));assertNull(findText(a.root,"Все выполнено"));
+        }
+    }
+    @Test public void previousDayMarksAndPlainNotesDoNotCompleteToday(){
+        try(Store store=new Store(context)){Habit h=new Habit();h.name="Вчера";h.created=LocalDate.now().minusDays(1);store.save(h);store.mark(h,LocalDate.now().minusDays(1));}
+        context.getSharedPreferences("settings",0).edit().putBoolean("show_completed",false).commit();
+        try(ActivityController<MainActivity> ctrl=Robolectric.buildActivity(MainActivity.class).setup()){MainActivity a=ctrl.get();assertNotNull(findText(a.root,"Вчера"));assertNull(findText(a.root,"Все выполнено"));assertFalse(findCheck(a.root).isChecked());}
+        context.deleteDatabase("chains.db");
+        try(Store store=new Store(context)){Habit h=new Habit();h.name="Запись";h.isNote=true;h.note="Текст";h.daily=false;store.save(h);}
+        try(ActivityController<MainActivity> ctrl=Robolectric.buildActivity(MainActivity.class).setup()){assertNull(findText(ctrl.get().root,"Все выполнено"));assertNotNull(findText(ctrl.get().root,"Запись"));}
     }
     static void collectInputs(View v,java.util.List<EditText> out){if(v instanceof EditText)out.add((EditText)v);if(v instanceof ViewGroup)for(int i=0;i<((ViewGroup)v).getChildCount();i++)collectInputs(((ViewGroup)v).getChildAt(i),out);}
     static TextView findText(View v,String text){if(v instanceof TextView&&text.contentEquals(((TextView)v).getText()))return (TextView)v;if(v instanceof ViewGroup)for(int i=0;i<((ViewGroup)v).getChildCount();i++){TextView found=findText(((ViewGroup)v).getChildAt(i),text);if(found!=null)return found;}return null;}
