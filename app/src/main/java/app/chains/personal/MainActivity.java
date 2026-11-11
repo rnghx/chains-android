@@ -37,7 +37,8 @@ public class MainActivity extends Activity {
     void weight(LinearLayout l,View v){l.addView(v,new LinearLayout.LayoutParams(0,-2,1));}
     void touch(View v,Runnable run){v.setOnClickListener(w->run.run());android.util.TypedValue value=new android.util.TypedValue();getTheme().resolveAttribute(android.R.attr.selectableItemBackground,value,true);v.setForeground(getDrawable(value.resourceId));}
     TextView button(String title,Runnable run){TextView t=strong(title,15,INK);t.setGravity(Gravity.CENTER);t.setMinHeight(dp(52));t.setPadding(dp(16),0,dp(16),0);t.setBackground(bg(PANEL,18));touch(t,run);return t;}
-    TextView icon(String kind,String label,Runnable run){TextView t=button("",run);t.setCompoundDrawablesWithIntrinsicBounds(new Symbol(kind),null,null,null);t.setPadding(dp(13),dp(13),dp(13),dp(13));t.setContentDescription(label);t.setMinHeight(0);t.setLayoutParams(new LinearLayout.LayoutParams(dp(48),dp(48)));return t;}
+    TextView readButton(Habit h){TextView t=button("Прочитать",()->readNote(h));t.setGravity(Gravity.START|Gravity.CENTER_VERTICAL);t.setPadding(0,0,0,0);return t;}
+    TextView icon(String kind,String label,Runnable run){TextView t=button("",run);t.setCompoundDrawablesWithIntrinsicBounds(new Symbol(kind),null,null,null);t.setPadding(dp(13),dp(13),dp(13),dp(13));t.setContentDescription(label);t.setMinHeight(0);t.setLayoutParams(new LinearLayout.LayoutParams(dp(48),dp(48)));if(kind.equals("settings"))t.setBackground(null);return t;}
     void title(LinearLayout parent,String s){TextView t=text(s,12,MUTED);t.setLetterSpacing(.13f);parent.addView(t);space(parent,12);}
 
     void render(){
@@ -66,7 +67,7 @@ public class MainActivity extends Activity {
         CheckBox check=new CheckBox(this);check.setButtonTintList(android.content.res.ColorStateList.valueOf(h.days.contains(shownDay)?ACCENT:0xff61665a));check.setChecked(h.days.contains(shownDay));check.setContentDescription(h.name+(h.isNote?": прочитано сегодня":": выполнено сегодня"));check.setVisibility(h.tracksDaily()?View.VISIBLE:View.GONE);
         top.addView(check,new LinearLayout.LayoutParams(dp(48),dp(48)));check.setOnCheckedChangeListener((v,checked)->{store.mark(h,LocalDate.now());if(checked){((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).cancel(h.id.hashCode());v.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);}render();});
         card.addView(top);
-        if(h.isNote){space(card,12);card.addView(button("Прочитать",()->readNote(h)));}
+        if(h.isNote){space(card,12);card.addView(readButton(h));}
         if(h.tracksDaily()){space(card,20);ChainProgress chain=new ChainProgress(h);card.addView(chain,new LinearLayout.LayoutParams(-1,dp(chain.rows*28)));}
         if(h.tracksDaily()&&h.completionDate(shownDay)!=null){space(card,12);card.addView(button("В архив",()->archiveHabit(h)));}
         touch(card,()->{if(h.isNote)readNote(h);else edit(h);});return card;
@@ -116,7 +117,7 @@ public class MainActivity extends Activity {
         for(Habit h:store.all())if(h.completedOn!=null){
             empty=false;LinearLayout item=column();item.setPadding(dp(16),dp(16),dp(16),dp(16));item.setBackground(bg(0xff1d1f1b,18));item.addView(strong(h.name,19,INK));space(item,8);
             DateTimeFormatter format=DateTimeFormatter.ofPattern("dd.MM.yyyy",RU);item.addView(text(h.created.format(format)+" → "+h.completedOn.format(format),13,MUTED));
-            if(h.isNote){space(item,12);item.addView(button("Прочитать",()->readNote(h)));}
+            if(h.isNote){space(item,12);item.addView(readButton(h));}
             space(item,12);item.addView(button("Вернуть",()->{store.restore(h);ReminderReceiver.schedule(this,h);d.dismiss();render();}));body.addView(item);space(body,12);
         }
         if(empty)body.addView(text("Пусто",15,MUTED));d.show();
