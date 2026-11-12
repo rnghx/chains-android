@@ -63,7 +63,7 @@ public class MainActivity extends Activity {
     View card(Habit h){
         LinearLayout card=column();card.setBackground(bg(PANEL,24));card.setPadding(dp(20),dp(20),dp(20),dp(20));
         LinearLayout top=row();LinearLayout labels=column();TextView name=strong(h.name,19,INK);name.setMaxLines(2);labels.addView(name);space(labels,5);
-        int n=h.streak(shownDay);if(h.tracksDaily())labels.addView(text(n+" / "+h.goal,13,n>=h.goal?ACCENT:MUTED));weight(top,labels);
+        int n=h.streak(shownDay);if(h.tracksDaily()){labels.addView(text("Начало · "+h.created.format(DateTimeFormatter.ofPattern("dd.MM.yyyy",RU)),12,MUTED));space(labels,5);labels.addView(text(n+" / "+h.goal,13,n>=h.goal?ACCENT:MUTED));}weight(top,labels);
         CheckBox check=new CheckBox(this);check.setButtonTintList(android.content.res.ColorStateList.valueOf(h.days.contains(shownDay)?ACCENT:0xff61665a));check.setChecked(h.days.contains(shownDay));check.setContentDescription(h.name+(h.isNote?": прочитано сегодня":": выполнено сегодня"));check.setVisibility(h.tracksDaily()?View.VISIBLE:View.GONE);
         top.addView(check,new LinearLayout.LayoutParams(dp(48),dp(48)));check.setOnCheckedChangeListener((v,checked)->{store.mark(h,LocalDate.now());if(checked){((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).cancel(h.id.hashCode());v.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);}render();});
         card.addView(top);
