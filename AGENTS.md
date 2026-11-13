@@ -14,3 +14,5 @@ Native Java Android app for personal use. Russian minimalist black interface. On
 - Source of truth: rnghx/chains-android. Run .github/workflows/release.yml with publish=true after preparing changes. Wait for completion and verify unauthenticated public manifest/APK hash.
 - Owner requests no persistent local project, APKs, archives or signing copy on the PC. Use repository editing and cloud builds; remove temporary local files if any were necessary. Deliver repository/download links, not local folders.
 - Cloud build must pass habit checks, Android framework/database/UI/update tests, release build, lint and APK signature checks. Report device testing honestly.
+
+- When the cloud environment reports starting, use wait_for_environment and continue the task after readiness; do not stop merely because startup is pending.

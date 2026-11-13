@@ -94,7 +94,7 @@ public class AppTest {
             db.execSQL("INSERT INTO marks VALUES (?,?)",new Object[]{id,LocalDate.now().minusDays(1).toString()});db.setVersion(1);
         }
         try(Store store=new Store(context)){
-            Habit h=store.all().get(0);assertEquals(id,h.id);assertEquals(start,h.created);assertEquals(90,h.goal);assertEquals(2,h.breakAfter);assertEquals(1230,h.minute);assertTrue(h.reminder);assertEquals(1,h.days.size());assertFalse(h.isNote);assertTrue(h.daily);assertEquals("",h.note);assertNull(h.completedOn);assertEquals(2,store.getReadableDatabase().getVersion());
+            Habit h=store.all().get(0);assertEquals(id,h.id);assertEquals(start,h.created);assertEquals(90,h.goal);assertEquals(2,h.breakAfter);assertEquals(1230,h.minute);assertTrue(h.reminder);assertEquals(1,h.days.size());assertFalse(h.isNote);assertTrue(h.daily);assertEquals("",h.note);assertNull(h.completedOn);assertEquals(3,store.getReadableDatabase().getVersion());
             org.json.JSONObject old=new org.json.JSONObject(store.exportJson());old.put("schema",1);org.json.JSONObject item=old.getJSONArray("habits").getJSONObject(0);item.remove("isNote");item.remove("note");item.remove("daily");item.remove("completed");store.delete(h);store.importJson(old.toString());assertEquals(id,store.all().get(0).id);assertEquals(1,store.all().get(0).days.size());
         }
     }
@@ -124,7 +124,7 @@ public class AppTest {
         }
     }
     @Test public void completionDateIncludesPastAchievementEvenAfterBreak(){
-        Habit h=new Habit();h.goal=2;LocalDate today=LocalDate.now();h.days.add(today.minusDays(10));h.days.add(today.minusDays(9));h.days.add(today);assertEquals(1,h.streak(today));assertEquals(today.minusDays(9),h.completionDate(today));
+        Habit h=new Habit();h.goal=2;LocalDate today=LocalDate.now();h.created=today.minusDays(10);h.days.add(today.minusDays(10));h.days.add(today.minusDays(9));h.days.add(today);assertEquals(1,h.streak(today));assertEquals(today.minusDays(9),h.completionDate(today));
     }
     @Test public void completedFilterPersistsAndDailySummaryUpdates() throws Exception {
         try(Store store=new Store(context)){
@@ -149,6 +149,38 @@ public class AppTest {
         context.deleteDatabase("chains.db");
         try(Store store=new Store(context)){Habit h=new Habit();h.name="Запись";h.isNote=true;h.note="Текст";h.daily=false;store.save(h);}
         try(ActivityController<MainActivity> ctrl=Robolectric.buildActivity(MainActivity.class).setup()){assertNull(findText(ctrl.get().root,"Все выполнено"));assertNotNull(findText(ctrl.get().root,"Запись"));}
+    }
+    @Test public void editingStartRecountsAndKeepsHistoryAndToday() throws Exception {
+        LocalDate today=LocalDate.now();
+        try(Store store=new Store(context)){
+            Habit h=new Habit();h.name="Цепочка";h.goal=2;store.createFromDate(h,today.minusDays(10));store.mark(h,today);assertEquals(11,h.streak(today));
+            store.saveWithStart(h,today.minusDays(3));assertEquals(4,h.streak(today));assertEquals(today.minusDays(2),h.completionDate(today));assertEquals(11,h.days.size());assertTrue(h.days.contains(today));assertEquals(today.minusDays(10),h.created);
+            String backup=store.exportJson();store.delete(h);store.importJson(backup);h=store.all().get(0);assertEquals(today.minusDays(3),h.startDate());assertEquals(11,h.days.size());assertEquals(4,h.streak(today));
+            store.saveWithStart(h,today.minusDays(15));assertEquals(16,h.streak(today));assertEquals(16,h.days.size());assertEquals(today.minusDays(15),h.created);
+            store.mark(h,today.minusDays(1));store.saveWithStart(h,h.startDate());assertFalse(store.all().get(0).days.contains(today.minusDays(1)));
+            String before=store.exportJson();try{store.saveWithStart(h,today.plusDays(1));fail();}catch(IllegalArgumentException expected){}assertEquals(before,store.exportJson());
+            store.saveWithStart(h,today);assertEquals(1,h.streak(today));assertNull(h.completionDate(today));assertTrue(h.days.contains(today));assertEquals(15,h.days.size());
+        }
+    }
+    @Test public void editStartThroughUiAndCancelSelection() throws Exception {
+        LocalDate today=LocalDate.now(),start=today.minusDays(4);
+        try(Store store=new Store(context)){Habit h=new Habit();h.name="Читать";h.isNote=true;h.note="Текст";store.save(h);}
+        try(ActivityController<MainActivity> ctrl=Robolectric.buildActivity(MainActivity.class).setup()){
+            MainActivity a=ctrl.get();a.edit(a.store.all().get(0));Dialog editor=org.robolectric.shadows.ShadowDialog.getLatestDialog();findText(editor.getWindow().getDecorView(),"Сегодня").performClick();DatePickerDialog picker=(DatePickerDialog)org.robolectric.shadows.ShadowDialog.getLatestDialog();Shadows.shadowOf(picker).getOnDateSetListenerCallback().onDateSet(picker.getDatePicker(),start.getYear(),start.getMonthValue()-1,start.getDayOfMonth());picker.dismiss();editor.dismiss();assertEquals(today,a.store.all().get(0).startDate());assertTrue(a.store.all().get(0).days.isEmpty());
+            a.edit(a.store.all().get(0));editor=org.robolectric.shadows.ShadowDialog.getLatestDialog();findText(editor.getWindow().getDecorView(),"Сегодня").performClick();picker=(DatePickerDialog)org.robolectric.shadows.ShadowDialog.getLatestDialog();Shadows.shadowOf(picker).getOnDateSetListenerCallback().onDateSet(picker.getDatePicker(),start.getYear(),start.getMonthValue()-1,start.getDayOfMonth());picker.dismiss();findText(editor.getWindow().getDecorView(),"Сохранить").performClick();
+            Habit h=a.store.all().get(0);assertEquals(start,h.startDate());assertEquals(4,h.streak(today));assertFalse(h.days.contains(today));assertNotNull(findText(a.root,"Начало · "+start.format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy"))));MainActivity.ChainProgress chain=a.new ChainProgress(h);assertTrue(chain.filled(3));assertFalse(chain.filled(4));
+            a.store.saveWithStart(h,today);assertEquals(0,h.streak(today));assertEquals(4,h.days.size());assertNull(h.completionDate(today));
+        }
+    }
+    @Test public void migrationFromVersionTwoKeepsNotesArchiveAndMarks() throws Exception {
+        String id=java.util.UUID.randomUUID().toString();LocalDate date=LocalDate.now().minusDays(5);
+        try(android.database.sqlite.SQLiteDatabase db=context.openOrCreateDatabase("chains.db",0,null)){
+            db.execSQL("CREATE TABLE habits (id TEXT PRIMARY KEY, name TEXT NOT NULL, goal INTEGER NOT NULL, break_after INTEGER NOT NULL, minute INTEGER NOT NULL, reminder INTEGER NOT NULL, created TEXT NOT NULL, is_note INTEGER NOT NULL DEFAULT 0, note TEXT NOT NULL DEFAULT '', daily INTEGER NOT NULL DEFAULT 1, completed TEXT)");
+            db.execSQL("CREATE TABLE marks (habit TEXT NOT NULL REFERENCES habits(id) ON DELETE CASCADE, day TEXT NOT NULL, PRIMARY KEY(habit,day))");db.execSQL("INSERT INTO habits VALUES (?,?,?,?,?,?,?,?,?,?,?)",new Object[]{id,"Заметка",1,0,1230,1,date.toString(),1,"Текст",1,date.toString()});db.execSQL("INSERT INTO marks VALUES (?,?)",new Object[]{id,date.toString()});db.setVersion(2);
+        }
+        try(Store store=new Store(context)){Habit h=store.all().get(0);assertEquals(date,h.startDate());assertEquals(date,h.completedOn);assertEquals("Текст",h.note);assertTrue(h.reminder);assertEquals(1230,h.minute);assertEquals(1,h.days.size());assertEquals(3,store.getReadableDatabase().getVersion());
+            org.json.JSONObject legacy=new org.json.JSONObject(store.exportJson());legacy.put("schema",2);legacy.getJSONArray("habits").getJSONObject(0).remove("start");store.delete(h);store.importJson(legacy.toString());assertEquals(date,store.all().get(0).startDate());assertEquals(date,store.all().get(0).completedOn);
+        }
     }
     static void collectInputs(View v,java.util.List<EditText> out){if(v instanceof EditText)out.add((EditText)v);if(v instanceof ViewGroup)for(int i=0;i<((ViewGroup)v).getChildCount();i++)collectInputs(((ViewGroup)v).getChildAt(i),out);}
     static TextView findText(View v,String text){if(v instanceof TextView&&text.contentEquals(((TextView)v).getText()))return (TextView)v;if(v instanceof ViewGroup)for(int i=0;i<((ViewGroup)v).getChildCount();i++){TextView found=findText(((ViewGroup)v).getChildAt(i),text);if(found!=null)return found;}return null;}

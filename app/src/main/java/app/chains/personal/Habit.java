@@ -9,14 +9,16 @@ public final class Habit {
     public int goal = 30, breakAfter = 1, minute = 21 * 60;
     public boolean reminder = false, isNote = false, daily = true;
     public String note = "";
-    public LocalDate completedOn;
+    public LocalDate completedOn, chainStart;
     public LocalDate created = LocalDate.now();
     public final TreeSet<LocalDate> days = new TreeSet<>();
 
+    public LocalDate startDate() { return chainStart==null?created:chainStart; }
     public boolean tracksDaily() { return !isNote || daily; }
     public LocalDate completionDate(LocalDate today) {
         int count=0;LocalDate previous=null;
         for(LocalDate day:days){
+            if(day.isBefore(startDate())) continue;
             if(day.isAfter(today)) break;
             if(previous!=null&&breakAfter>0&&ChronoUnit.DAYS.between(previous,day)-1>=breakAfter) count=0;
             count++;if(count>=goal) return day;previous=day;
@@ -29,6 +31,7 @@ public final class Habit {
         LocalDate newer = today.plusDays(1);
         for (LocalDate day : days.descendingSet()) {
             if (day.isAfter(today)) continue;
+            if (day.isBefore(startDate())) break;
             long missed = ChronoUnit.DAYS.between(day, newer) - 1;
             // Today remains available until midnight.
             if (newer.equals(today.plusDays(1)) && !day.equals(today)) missed--;
