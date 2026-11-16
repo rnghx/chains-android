@@ -63,7 +63,7 @@ public class MainActivity extends Activity {
     View card(Habit h){
         LinearLayout card=column();card.setBackground(bg(PANEL,24));card.setPadding(dp(20),dp(20),dp(20),dp(20));
         LinearLayout top=row();LinearLayout labels=column();TextView name=strong(h.name,19,INK);name.setMaxLines(2);labels.addView(name);space(labels,5);
-        int n=h.streak(shownDay);if(h.tracksDaily()){labels.addView(text("Начало · "+h.startDate().format(DateTimeFormatter.ofPattern("dd.MM.yyyy",RU)),12,MUTED));space(labels,5);labels.addView(text(n+" / "+h.goal,13,n>=h.goal?ACCENT:MUTED));}weight(top,labels);
+        int n=h.streak(shownDay);if(h.tracksDaily()){labels.addView(text("Начало · "+h.startDate().format(DateTimeFormatter.ofPattern("dd.MM.yyyy",RU)),12,MUTED));space(labels,5);labels.addView(text("День "+(java.time.temporal.ChronoUnit.DAYS.between(h.startDate(),shownDay)+1)+" · "+n+" / "+h.goal,13,n>=h.goal?ACCENT:MUTED));}weight(top,labels);
         CheckBox check=new CheckBox(this);check.setButtonTintList(android.content.res.ColorStateList.valueOf(h.days.contains(shownDay)?ACCENT:0xff61665a));check.setChecked(h.days.contains(shownDay));check.setContentDescription(h.name+(h.isNote?": прочитано сегодня":": выполнено сегодня"));check.setVisibility(h.tracksDaily()?View.VISIBLE:View.GONE);
         top.addView(check,new LinearLayout.LayoutParams(dp(48),dp(48)));check.setOnCheckedChangeListener((v,checked)->{store.mark(h,LocalDate.now());if(checked){((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).cancel(h.id.hashCode());v.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);}render();});
         card.addView(top);
@@ -152,17 +152,20 @@ public class MainActivity extends Activity {
         public void setAlpha(int a){p.setAlpha(a);}public void setColorFilter(ColorFilter f){p.setColorFilter(f);}public int getOpacity(){return PixelFormat.TRANSLUCENT;}
     }
     class ChainProgress extends View {
-        final int goal,completed,rows;final Paint paint=new Paint(3);
-        ChainProgress(Habit h){super(MainActivity.this);goal=h.goal;completed=Math.min(h.streak(LocalDate.now()),goal);rows=(goal+9)/10;setContentDescription(h.name+": "+completed+" из "+goal);}
-        boolean filled(int index){return index>=0&&index<completed;}
+        final int goal,rows;final Paint paint=new Paint(3);final LocalDate start,today;final Set<LocalDate> days;
+        ChainProgress(Habit h){super(MainActivity.this);start=h.startDate();today=LocalDate.now();days=new HashSet<>(h.days);int elapsed=(int)java.time.temporal.ChronoUnit.DAYS.between(start,today)+1;goal=Math.max(h.goal,elapsed);rows=(goal+9)/10;setContentDescription(h.name+": день "+elapsed+", серия "+h.streak(today)+" из "+h.goal);}
+        boolean filled(int index){return index>=0&&index<goal&&!start.plusDays(index).isAfter(today)&&days.contains(start.plusDays(index));}
+        boolean missed(int index){return index>=0&&index<goal&&start.plusDays(index).isBefore(today)&&!filled(index);}
         protected void onDraw(Canvas canvas){
             float width=getWidth(),pad=dp(2),size=Math.min(dp(18),(width-2*pad-dp(7)*9)/10f),step=(width-2*pad-size)/9f;
             Rect clip=canvas.getClipBounds();int first=Math.max(0,clip.top/dp(28))*10,last=Math.min(goal,((clip.bottom/dp(28))+1)*10);
             for(int index=first;index<last;index++){
                 int column=index%10;float x=pad+column*step,y=dp(3)+(index/10)*dp(28);
                 paint.setStyle(Paint.Style.FILL);
-                if(column<9&&index+1<goal){paint.setColor(filled(index+1)?0xff7b9253:LINE);canvas.drawRect(x+size,y+size/2-dp(1),x+step,y+size/2+dp(1),paint);}
+                if(column<9&&index+1<goal){paint.setColor(filled(index)&&filled(index+1)?0xff7b9253:LINE);canvas.drawRect(x+size,y+size/2-dp(1),x+step,y+size/2+dp(1),paint);}
                 paint.setColor(filled(index)?ACCENT:LINE);canvas.drawRoundRect(x,y,x+size,y+size,dp(6),dp(6),paint);
+                if(missed(index)){paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(dp(1.5f));paint.setColor(0xffcf8d83);canvas.drawRoundRect(x+dp(1),y+dp(1),x+size-dp(1),y+size-dp(1),dp(5),dp(5),paint);}
+                else if(start.plusDays(index).equals(today)&&!filled(index)){paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(dp(1));paint.setColor(MUTED);canvas.drawRoundRect(x+dp(1),y+dp(1),x+size-dp(1),y+size-dp(1),dp(5),dp(5),paint);}
             }
         }
     }

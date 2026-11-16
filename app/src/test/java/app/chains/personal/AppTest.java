@@ -182,6 +182,14 @@ public class AppTest {
             org.json.JSONObject legacy=new org.json.JSONObject(store.exportJson());legacy.put("schema",2);legacy.getJSONArray("habits").getJSONObject(0).remove("start");store.delete(h);store.importJson(legacy.toString());assertEquals(date,store.all().get(0).startDate());assertEquals(date,store.all().get(0).completedOn);
         }
     }
+    @Test public void calendarChainKeepsMissedDaysInPlaceAndTodayOpen() throws Exception {
+        LocalDate today=LocalDate.now();
+        try(Store store=new Store(context)){Habit h=new Habit();h.name="Каждый день";h.goal=3;h.created=today.minusDays(5);store.save(h);store.mark(h,today.minusDays(5));store.mark(h,today.minusDays(3));store.mark(h,today.minusDays(1));}
+        try(ActivityController<MainActivity> ctrl=Robolectric.buildActivity(MainActivity.class).setup()){
+            MainActivity a=ctrl.get();Habit h=a.store.all().get(0);MainActivity.ChainProgress chain=a.new ChainProgress(h);assertEquals(6,chain.goal);assertTrue(chain.filled(0));assertFalse(chain.filled(1));assertTrue(chain.missed(1));assertTrue(chain.filled(2));assertTrue(chain.missed(3));assertTrue(chain.filled(4));assertFalse(chain.filled(5));assertFalse(chain.missed(5));assertFalse(chain.missed(6));assertNotNull(findText(a.root,"День 6 · 1 / 3"));
+            screenshot(a.getWindow().getDecorView(),"calendar-chain");a.store.mark(h,LocalDate.now());a.render();chain=a.new ChainProgress(a.store.all().get(0));assertTrue(chain.filled(5));assertTrue(chain.missed(1));assertEquals(4,a.store.all().get(0).days.size());
+        }
+    }
     static void collectInputs(View v,java.util.List<EditText> out){if(v instanceof EditText)out.add((EditText)v);if(v instanceof ViewGroup)for(int i=0;i<((ViewGroup)v).getChildCount();i++)collectInputs(((ViewGroup)v).getChildAt(i),out);}
     static TextView findText(View v,String text){if(v instanceof TextView&&text.contentEquals(((TextView)v).getText()))return (TextView)v;if(v instanceof ViewGroup)for(int i=0;i<((ViewGroup)v).getChildCount();i++){TextView found=findText(((ViewGroup)v).getChildAt(i),text);if(found!=null)return found;}return null;}
     static CheckBox findCheck(View v){if(v instanceof CheckBox)return (CheckBox)v;if(v instanceof ViewGroup)for(int i=0;i<((ViewGroup)v).getChildCount();i++){CheckBox c=findCheck(((ViewGroup)v).getChildAt(i));if(c!=null)return c;}return null;}

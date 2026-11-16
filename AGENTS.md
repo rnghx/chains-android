@@ -2,7 +2,7 @@
 
 Native Java Android app for personal use. Russian minimalist black interface. One home screen, today's checkboxes and goal-progress chains. No calendar or separate tabs.
 
-- Every chain starts at index 0 on the left. The first completion must fill the first link. Goal equals link count; wrap left-to-right in rows. Do not render a rolling past-date window.
+- Each chain link represents one calendar day from the saved start date, left-to-right in rows. Keep missed days visible in place; today remains open until midnight. Show at least the goal length and extend for elapsed days. Do not use a rolling past-date window.
 - Keep applicationId app.chains.personal and database chains.db permanently.
 - Preserve all completion history, goals, reminders and break rules across updates. Schema changes need non-destructive migrations and tests.
 - Today remains open until local midnight. Goal and rule edits must not remove marks.
