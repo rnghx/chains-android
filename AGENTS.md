@@ -13,6 +13,6 @@
 - Owner requests no persistent local project, APKs, archives or signing copy on the PC. Use repository editing and cloud builds; remove temporary local files if any were necessary. Deliver repository/download links, not local folders.
 - Cloud build must pass habit checks, Android framework/database/UI/update tests, release build, lint and APK signature checks. Report device testing honestly.
 
-- When the cloud environment reports starting, use wait_for_environment and continue the task after readiness; do not stop merely because startup is pending.
+- Handle cloud environment activation automatically. When its status is starting, call wait_for_environment, keep waiting on the same call if it yields, and continue work once ready. Do not ask the owner to activate or restart it manually merely because startup is pending, and do not end the task while waiting. An actual startup failure must be distinguished from normal pending activation.
 
 - Keep README, repository metadata, and release descriptions minimal; do not add product explanations.
