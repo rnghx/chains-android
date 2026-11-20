@@ -1,6 +1,4 @@
-# Chains Android
-
-Native Java Android app for personal use. Russian minimalist black interface. One home screen, today's checkboxes and goal-progress chains. No calendar or separate tabs.
+# Project instructions
 
 - Each chain link represents one calendar day from the saved start date, left-to-right in rows. Keep missed days visible in place; today remains open until midnight. Show at least the goal length and extend for elapsed days. Do not use a rolling past-date window.
 - Keep applicationId app.chains.personal and database chains.db permanently.
@@ -16,3 +14,5 @@ Native Java Android app for personal use. Russian minimalist black interface. On
 - Cloud build must pass habit checks, Android framework/database/UI/update tests, release build, lint and APK signature checks. Report device testing honestly.
 
 - When the cloud environment reports starting, use wait_for_environment and continue the task after readiness; do not stop merely because startup is pending.
+
+- Keep README, repository metadata, and release descriptions minimal; do not add product explanations.
