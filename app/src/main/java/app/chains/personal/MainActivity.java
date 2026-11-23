@@ -101,6 +101,22 @@ public class MainActivity extends Activity {
         if(original!=null){space(body,10);TextView remove=button(h.isNote?"Удалить заметку":"Удалить привычку",()->new AlertDialog.Builder(this).setTitle("Удалить «"+h.name+"»?").setMessage("История этой привычки будет удалена.").setNegativeButton("Отмена",null).setPositiveButton("Удалить",(d,w)->{h.reminder=false;ReminderReceiver.schedule(this,h);((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).cancel(h.id.hashCode());store.delete(h);dialog.dismiss();render();}).show());remove.setTextColor(0xffd8a8a0);body.addView(remove);}
         dialog.show();
     }
+    Habit currentHabit(String id){for(Habit h:store.all())if(h.id.equals(id))return h;return null;}
+    void pickMarkDay(Habit habit){
+        Habit h=currentHabit(habit.id);if(h==null||h.completedOn!=null||!h.tracksDaily())return;
+        LocalDate today=LocalDate.now();DatePickerDialog picker=new DatePickerDialog(this,(v,year,month,day)->editMarkDay(h,LocalDate.of(year,month+1,day)),today.getYear(),today.getMonthValue()-1,today.getDayOfMonth());
+        picker.getDatePicker().setMinDate(h.startDate().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli());picker.getDatePicker().setMaxDate(System.currentTimeMillis());picker.show();
+    }
+    void editMarkDay(Habit habit,LocalDate day){
+        Habit h=currentHabit(habit.id);if(h==null||h.completedOn!=null||!h.tracksDaily()||day.isBefore(h.startDate())||day.isAfter(LocalDate.now()))return;
+        boolean mark=!h.days.contains(day);
+        new AlertDialog.Builder(this).setTitle(day.format(DateTimeFormatter.ofPattern("d MMMM yyyy",RU))).setNegativeButton("Отмена",null).setPositiveButton(mark?(h.isNote?"Прочитано":"Выполнено"):"Убрать отметку",(d,w)->{
+            Habit current=currentHabit(h.id);if(current==null||current.completedOn!=null||!current.tracksDaily())return;
+            if(current.days.contains(day)!=mark)store.mark(current,day);
+            if(mark&&day.equals(LocalDate.now()))((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).cancel(current.id.hashCode());
+            render();
+        }).show();
+    }
     void archiveHabit(Habit h){
         store.archive(h);ReminderReceiver.schedule(this,h);((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).cancel(h.id.hashCode());render();
     }
@@ -152,8 +168,19 @@ public class MainActivity extends Activity {
         public void setAlpha(int a){p.setAlpha(a);}public void setColorFilter(ColorFilter f){p.setColorFilter(f);}public int getOpacity(){return PixelFormat.TRANSLUCENT;}
     }
     class ChainProgress extends View {
-        final int goal,rows;final Paint paint=new Paint(3);final LocalDate start,today;final Set<LocalDate> days;
-        ChainProgress(Habit h){super(MainActivity.this);start=h.startDate();today=LocalDate.now();days=new HashSet<>(h.days);int elapsed=(int)java.time.temporal.ChronoUnit.DAYS.between(start,today)+1;goal=Math.max(h.goal,elapsed);rows=(goal+9)/10;setContentDescription(h.name+": день "+elapsed+", серия "+h.streak(today)+" из "+h.goal);}
+        final int goal,rows;final Paint paint=new Paint(3);final LocalDate start,today;final Set<LocalDate> days;final Habit habit;final GestureDetector gestures;LocalDate selectedDay;
+        ChainProgress(Habit h){super(MainActivity.this);habit=h;setClickable(true);setFocusable(true);gestures=new GestureDetector(MainActivity.this,new GestureDetector.SimpleOnGestureListener(){
+            @Override public boolean onDown(MotionEvent event){return true;}
+            @Override public boolean onSingleTapUp(MotionEvent event){selectedDay=dayAt(event.getX(),event.getY());if(selectedDay!=null)performClick();return true;}
+        });gestures.setOnDoubleTapListener(null);start=h.startDate();today=LocalDate.now();days=new HashSet<>(h.days);int elapsed=(int)java.time.temporal.ChronoUnit.DAYS.between(start,today)+1;goal=Math.max(h.goal,elapsed);rows=(goal+9)/10;setContentDescription(h.name+": день "+elapsed+", серия "+h.streak(today)+" из "+h.goal);}
+        LocalDate dayAt(float x,float y){
+            if(x<0||x>=getWidth()||y<0||y>=getHeight())return null;
+            float pad=dp(2),size=Math.min(dp(18),(getWidth()-2*pad-dp(7)*9)/10f),step=(getWidth()-2*pad-size)/9f;
+            if(step<=0)return null;int column=Math.max(0,Math.min(9,Math.round((x-pad-size/2)/step))),row=(int)(y/dp(28)),index=row*10+column;
+            if(index<0||index>=goal)return null;LocalDate date=start.plusDays(index);return date.isAfter(LocalDate.now())?null:date;
+        }
+        @Override public boolean onTouchEvent(MotionEvent event){return gestures.onTouchEvent(event);}
+        @Override public boolean performClick(){super.performClick();LocalDate day=selectedDay;selectedDay=null;if(day==null)pickMarkDay(habit);else editMarkDay(habit,day);return true;}
         boolean filled(int index){return index>=0&&index<goal&&!start.plusDays(index).isAfter(today)&&days.contains(start.plusDays(index));}
         boolean missed(int index){return index>=0&&index<goal&&start.plusDays(index).isBefore(today)&&!filled(index);}
         protected void onDraw(Canvas canvas){
