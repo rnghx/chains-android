@@ -42,7 +42,7 @@ public class MainActivity extends Activity {
     void title(LinearLayout parent,String s){TextView t=text(s,12,MUTED);t.setLetterSpacing(.13f);parent.addView(t);space(parent,12);}
 
     void render(){
-        shownDay=LocalDate.now(); habits=new ArrayList<>();for(Habit h:store.all())if(h.completedOn==null)habits.add(h);
+        shownDay=LocalDate.now(); habits=new ArrayList<>();for(Habit h:store.all())if(!h.isArchived())habits.add(h);
         root=column();root.setBackgroundColor(Color.BLACK);root.setPadding(dp(24),0,dp(24),0);
         root.setOnApplyWindowInsetsListener((v,insets)->{v.setPadding(dp(24),insets.getSystemWindowInsetTop(),dp(24),insets.getSystemWindowInsetBottom());return insets.consumeSystemWindowInsets();});
         setContentView(root);root.requestApplyInsets();space(root,18);
@@ -97,21 +97,22 @@ public class MainActivity extends Activity {
         LinearLayout reminderRow=row();weight(reminderRow,strong("Напоминание",16,INK));Switch reminder=new Switch(this);reminder.setContentDescription("Ежедневное напоминание");reminder.setChecked(h.reminder);reminderRow.addView(reminder);tracking.addView(reminderRow);space(tracking,10);
         final int[] minute={h.minute};TextView time=button(String.format(RU,"%02d:%02d",minute[0]/60,minute[0]%60),()->{});time.setBackground(bg(0xff20221e,14));touch(time,()->new TimePickerDialog(this,(v,hr,min)->{minute[0]=hr*60+min;time.setText(String.format(RU,"%02d:%02d",hr,min));},minute[0]/60,minute[0]%60,true).show());time.setVisibility(reminder.isChecked()?View.VISIBLE:View.GONE);reminder.setOnCheckedChangeListener((v,on)->time.setVisibility(on?View.VISIBLE:View.GONE));tracking.addView(time);space(tracking,26);
         TextView save=button("Сохранить",()->{String n=name.getText().toString().trim();int g;try{g=Integer.parseInt(goal.getText().toString());if(g<1||g>9999)throw new Exception();}catch(Exception e){goal.setError("От 1 до 9999");return;}if(h.isNote&&noteText.getText().toString().trim().isEmpty()){noteText.setError("Текст");return;}if(h.isNote&&n.isEmpty())n="Заметка";if(n.isEmpty()){name.setError("Название");return;}h.note=h.isNote?noteText.getText().toString():"";h.daily=!h.isNote||daily.isChecked();h.name=n;h.goal=g;h.breakAfter=rule[0];h.minute=minute[0];h.reminder=reminder.isChecked();if(original==null)store.createFromDate(h,start[0]);else store.saveWithStart(h,start[0]);ReminderReceiver.schedule(this,h);dialog.dismiss();render();if(h.reminder)notificationPermission();});save.setBackground(bg(ACCENT,16));save.setTextColor(Color.BLACK);body.addView(save,new LinearLayout.LayoutParams(-1,dp(56)));
-        if(original!=null&&(h.completionDate(LocalDate.now())!=null||!h.tracksDaily())){space(body,10);body.addView(button("В архив",()->{dialog.dismiss();archiveHabit(h);}));}
+        if(original!=null){space(body,10);body.addView(button("В архив",()->{dialog.dismiss();archiveHabit(h);}));}
+        if(original!=null&&h.tracksDaily()){space(body,10);body.addView(button("Сбросить",()->new AlertDialog.Builder(this).setTitle("Начать заново?").setMessage("Текущая цепочка сохранится в архиве.").setNegativeButton("Отмена",null).setPositiveButton("Сбросить",(d,w)->{Habit current=currentHabit(h.id);if(current==null||current.isArchived())return;Habit fresh=store.reset(current);ReminderReceiver.schedule(this,current);ReminderReceiver.schedule(this,fresh);((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).cancel(current.id.hashCode());dialog.dismiss();render();}).show()));}
         if(original!=null){space(body,10);TextView remove=button(h.isNote?"Удалить заметку":"Удалить привычку",()->new AlertDialog.Builder(this).setTitle("Удалить «"+h.name+"»?").setMessage("История этой привычки будет удалена.").setNegativeButton("Отмена",null).setPositiveButton("Удалить",(d,w)->{h.reminder=false;ReminderReceiver.schedule(this,h);((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).cancel(h.id.hashCode());store.delete(h);dialog.dismiss();render();}).show());remove.setTextColor(0xffd8a8a0);body.addView(remove);}
         dialog.show();
     }
     Habit currentHabit(String id){for(Habit h:store.all())if(h.id.equals(id))return h;return null;}
     void pickMarkDay(Habit habit){
-        Habit h=currentHabit(habit.id);if(h==null||h.completedOn!=null||!h.tracksDaily())return;
+        Habit h=currentHabit(habit.id);if(h==null||h.isArchived()||!h.tracksDaily())return;
         LocalDate today=LocalDate.now();DatePickerDialog picker=new DatePickerDialog(this,(v,year,month,day)->editMarkDay(h,LocalDate.of(year,month+1,day)),today.getYear(),today.getMonthValue()-1,today.getDayOfMonth());
         picker.getDatePicker().setMinDate(h.startDate().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli());picker.getDatePicker().setMaxDate(System.currentTimeMillis());picker.show();
     }
     void editMarkDay(Habit habit,LocalDate day){
-        Habit h=currentHabit(habit.id);if(h==null||h.completedOn!=null||!h.tracksDaily()||day.isBefore(h.startDate())||day.isAfter(LocalDate.now()))return;
+        Habit h=currentHabit(habit.id);if(h==null||h.isArchived()||!h.tracksDaily()||day.isBefore(h.startDate())||day.isAfter(LocalDate.now()))return;
         boolean mark=!h.days.contains(day);
         new AlertDialog.Builder(this).setTitle(day.format(DateTimeFormatter.ofPattern("d MMMM yyyy",RU))).setNegativeButton("Отмена",null).setPositiveButton(mark?(h.isNote?"Прочитано":"Выполнено"):"Убрать отметку",(d,w)->{
-            Habit current=currentHabit(h.id);if(current==null||current.completedOn!=null||!current.tracksDaily())return;
+            Habit current=currentHabit(h.id);if(current==null||current.isArchived()||!current.tracksDaily())return;
             if(current.days.contains(day)!=mark)store.mark(current,day);
             if(mark&&day.equals(LocalDate.now()))((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).cancel(current.id.hashCode());
             render();
@@ -122,17 +123,18 @@ public class MainActivity extends Activity {
     }
     void readNote(Habit h){
         LinearLayout body=column();Dialog d=sheet(body);LinearLayout top=row();weight(top,strong(h.name,24,INK));
-        if(h.completedOn==null)top.addView(icon("edit","Редактировать",()->{d.dismiss();edit(h);}));top.addView(icon("close","Закрыть",d::dismiss));body.addView(top);space(body,20);
+        if(!h.isArchived())top.addView(icon("edit","Редактировать",()->{d.dismiss();edit(h);}));top.addView(icon("close","Закрыть",d::dismiss));body.addView(top);space(body,20);
         TextView note=text(h.note,18,INK);note.setTextIsSelectable(true);note.setLineSpacing(dp(4),1);body.addView(note);
-        if(h.completedOn==null&&h.tracksDaily()){space(body,24);TextView read=button(h.days.contains(LocalDate.now())?"Прочитано сегодня":"Прочитано",()->{if(!h.days.contains(LocalDate.now())){store.mark(h,LocalDate.now());((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).cancel(h.id.hashCode());}d.dismiss();render();});body.addView(read);}
+        if(!h.isArchived()&&h.tracksDaily()){space(body,24);TextView read=button(h.days.contains(LocalDate.now())?"Прочитано сегодня":"Прочитано",()->{if(!h.days.contains(LocalDate.now())){store.mark(h,LocalDate.now());((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).cancel(h.id.hashCode());}d.dismiss();render();});body.addView(read);}
         d.show();
     }
     void archive(){
         LinearLayout body=column();Dialog d=sheet(body);LinearLayout top=row();weight(top,strong("Архив",24,INK));top.addView(icon("close","Закрыть",d::dismiss));body.addView(top);space(body,24);
         boolean empty=true;
-        for(Habit h:store.all())if(h.completedOn!=null){
+        for(Habit h:store.all())if(h.isArchived()){
             empty=false;LinearLayout item=column();item.setPadding(dp(16),dp(16),dp(16),dp(16));item.setBackground(bg(0xff1d1f1b,18));item.addView(strong(h.name,19,INK));space(item,8);
-            DateTimeFormatter format=DateTimeFormatter.ofPattern("dd.MM.yyyy",RU);item.addView(text(h.startDate().format(format)+" → "+h.completedOn.format(format),13,MUTED));
+            DateTimeFormatter format=DateTimeFormatter.ofPattern("dd.MM.yyyy",RU);item.addView(text(h.startDate().format(format)+" → "+(h.completedOn==null?h.archiveDate():h.completedOn).format(format),13,MUTED));
+            if(h.tracksDaily()){space(item,8);item.addView(text((h.completedOn==null?"Не завершено · ":"")+h.streak(h.completedOn==null?h.archiveDate():h.completedOn)+" / "+h.goal,13,MUTED));}
             if(h.isNote){space(item,12);item.addView(readButton(h));}
             space(item,12);item.addView(button("Вернуть",()->{store.restore(h);ReminderReceiver.schedule(this,h);d.dismiss();render();}));body.addView(item);space(body,12);
         }

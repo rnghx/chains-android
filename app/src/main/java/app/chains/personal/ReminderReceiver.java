@@ -13,7 +13,7 @@ public class ReminderReceiver extends BroadcastReceiver {
         Intent intent=new Intent(c,ReminderReceiver.class).setAction("habit:"+h.id).putExtra("id",h.id);
         PendingIntent pi=PendingIntent.getBroadcast(c,0,intent,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
         manager.cancel(pi);
-        if(!h.reminder||h.completedOn!=null||!h.tracksDaily()) return;
+        if(!h.reminder||h.isArchived()||!h.tracksDaily()) return;
         ZonedDateTime now=ZonedDateTime.now(), at=now.toLocalDate().atTime(h.minute/60,h.minute%60).atZone(now.getZone());
         if(!at.isAfter(now)) at=at.plusDays(1);
         long trigger=at.toInstant().toEpochMilli();
@@ -30,7 +30,7 @@ public class ReminderReceiver extends BroadcastReceiver {
         try(Store store=new Store(c)) {
             for(Habit h:store.all()) if(h.id.equals(id)) {
                 schedule(c,h);
-                if(!h.reminder||h.completedOn!=null||!h.tracksDaily()||h.days.contains(LocalDate.now())) return;
+                if(!h.reminder||h.isArchived()||!h.tracksDaily()||h.days.contains(LocalDate.now())) return;
                 if(Build.VERSION.SDK_INT>=33 && c.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED) return;
                 NotificationManager nm=(NotificationManager)c.getSystemService(Context.NOTIFICATION_SERVICE);
                 nm.createNotificationChannel(new NotificationChannel("habits","Привычки",NotificationManager.IMPORTANCE_DEFAULT));

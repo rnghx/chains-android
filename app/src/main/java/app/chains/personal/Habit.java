@@ -9,10 +9,12 @@ public final class Habit {
     public int goal = 30, breakAfter = 1, minute = 21 * 60;
     public boolean reminder = false, isNote = false, daily = true;
     public String note = "";
-    public LocalDate completedOn, chainStart;
+    public LocalDate completedOn, chainStart, archivedOn;
     public LocalDate created = LocalDate.now();
     public final TreeSet<LocalDate> days = new TreeSet<>();
 
+    public boolean isArchived() { return archivedOn!=null||completedOn!=null; }
+    public LocalDate archiveDate() { return archivedOn!=null?archivedOn:completedOn; }
     public LocalDate startDate() { return chainStart==null?created:chainStart; }
     public boolean tracksDaily() { return !isNote || daily; }
     public LocalDate completionDate(LocalDate today) {
