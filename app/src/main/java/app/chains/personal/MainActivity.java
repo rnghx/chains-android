@@ -130,11 +130,19 @@ public class MainActivity extends Activity {
     }
     void archive(){
         LinearLayout body=column();Dialog d=sheet(body);LinearLayout top=row();weight(top,strong("Архив",24,INK));top.addView(icon("close","Закрыть",d::dismiss));body.addView(top);space(body,24);
+        List<Habit> archived=new ArrayList<>();int finished=0,stopped=0,breaks=0;
+        for(Habit h:store.all())if(h.isArchived()){archived.add(h);if(h.tracksDaily()){if(h.completedOn!=null)finished++;else stopped++;breaks+=h.breakDates(h.archiveDate()).size();}}
+        archived.sort((a,b)->b.archiveDate().compareTo(a.archiveDate()));
+        if(finished+stopped>0){body.addView(text("Завершено · "+finished+"   Остановлено · "+stopped,13,MUTED));space(body,8);body.addView(text("Обрывов · "+breaks,13,MUTED));space(body,24);}
         boolean empty=true;
-        for(Habit h:store.all())if(h.isArchived()){
+        for(Habit h:archived){
             empty=false;LinearLayout item=column();item.setPadding(dp(16),dp(16),dp(16),dp(16));item.setBackground(bg(0xff1d1f1b,18));item.addView(strong(h.name,19,INK));space(item,8);
-            DateTimeFormatter format=DateTimeFormatter.ofPattern("dd.MM.yyyy",RU);item.addView(text(h.startDate().format(format)+" → "+(h.completedOn==null?h.archiveDate():h.completedOn).format(format),13,MUTED));
-            if(h.tracksDaily()){space(item,8);item.addView(text((h.completedOn==null?"Не завершено · ":"")+h.streak(h.completedOn==null?h.archiveDate():h.completedOn)+" / "+h.goal,13,MUTED));}
+            DateTimeFormatter format=DateTimeFormatter.ofPattern("dd.MM.yyyy",RU);item.addView(text(h.startDate().format(format)+" → "+h.archiveDate().format(format),13,MUTED));
+            if(h.tracksDaily()){
+                space(item,8);item.addView(text("Выполнено · "+h.completedDays(h.archiveDate())+" / "+h.goal+" дней",15,INK));
+                space(item,8);item.addView(text((h.completedOn==null?"Остановлено · ":"Завершено · ")+(h.completedOn==null?h.archiveDate():h.completedOn).format(format),13,h.completedOn==null?MUTED:ACCENT));
+                List<LocalDate> broken=h.breakDates(h.archiveDate());if(!broken.isEmpty()){space(item,8);StringBuilder dates=new StringBuilder("Обрывы · ");for(int i=0;i<broken.size();i++){if(i>0)dates.append(", ");dates.append(broken.get(i).format(format));}item.addView(text(dates.toString(),13,MUTED));}
+            }
             if(h.isNote){space(item,12);item.addView(readButton(h));}
             space(item,12);item.addView(button("Вернуть",()->{store.restore(h);ReminderReceiver.schedule(this,h);d.dismiss();render();}));body.addView(item);space(body,12);
         }

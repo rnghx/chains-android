@@ -28,6 +28,22 @@ public final class Habit {
         return null;
     }
 
+    public int completedDays(LocalDate until) {
+        if(until.isBefore(startDate())) return 0;
+        return days.subSet(startDate(),true,until,true).size();
+    }
+    public List<LocalDate> breakDates(LocalDate until) {
+        List<LocalDate> breaks=new ArrayList<>();if(breakAfter<=0)return breaks;
+        LocalDate previous=null,closed=until.minusDays(1);
+        for(LocalDate day:days){
+            if(day.isBefore(startDate()))continue;if(day.isAfter(until))break;
+            if(previous!=null){LocalDate broken=previous.plusDays(breakAfter);if(broken.isBefore(day))breaks.add(broken);}
+            previous=day;
+        }
+        if(previous!=null){LocalDate broken=previous.plusDays(breakAfter);if(!broken.isAfter(closed))breaks.add(broken);}
+        return breaks;
+    }
+
     public int streak(LocalDate today) {
         int count = 0;
         LocalDate newer = today.plusDays(1);
